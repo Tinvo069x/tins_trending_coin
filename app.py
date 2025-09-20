@@ -6,7 +6,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="Crypto Market Dashboard", layout="wide")
 
-st.title("📊 Headmap Dashboard By Tins")
+st.title("📊 Crypto Market Dashboard (CoinGecko API)")
 
 # --- Sidebar chọn chế độ ---
 tab = st.sidebar.radio("Chọn chế độ hiển thị", ["Heatmap hiện tại", "Lịch sử 3 năm"])
@@ -16,6 +16,7 @@ if tab == "Heatmap hiện tại":
     top_n = st.sidebar.slider("Chọn số coin (Top N)", 10, 100, 30, 10)
     currency = st.sidebar.selectbox("Chọn đơn vị tiền", ["usd", "eur", "vnd"])
     sort_option = st.sidebar.radio("Sắp xếp coin theo:", ["MarketCap", "%Change 1h", "%Change 24h", "%Change 7d"])
+    rank_period = st.sidebar.radio("Xem Top Gainers/Losers theo:", ["%1h","%24h","%7d"])
     refresh = st.sidebar.number_input("Tự động refresh (giây)", 0, 600, 0)
 
     # --- Fetch data ---
@@ -41,10 +42,9 @@ if tab == "Heatmap hiện tại":
         'price_change_percentage_7d_in_currency': '%7d'
     }, inplace=True)
 
-    df['market_cap'] = pd.to_numeric(df['market_cap'], errors='coerce').fillna(0)
-    df['%1h'] = pd.to_numeric(df['%1h'], errors='coerce').fillna(0)
-    df['%24h'] = pd.to_numeric(df['%24h'], errors='coerce').fillna(0)
-    df['%7d'] = pd.to_numeric(df['%7d'], errors='coerce').fillna(0)
+    for col in ['market_cap', '%1h', '%24h', '%7d']:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
     df = df[df['market_cap'] > 0]
 
     # --- Sorting logic ---
@@ -62,7 +62,7 @@ if tab == "Heatmap hiện tại":
         df,
         path=['symbol'],
         values='market_cap',
-        color='%24h',  # luôn dùng %24h để tô màu
+        color='%24h',  # tô màu theo %24h
         hover_data={
             'current_price': True,
             'market_cap': True,
@@ -86,19 +86,32 @@ if tab == "Heatmap hiện tại":
     👉 Di chuột vào từng ô để xem chi tiết **%1h, %24h, %7d, MarketCap, Volume**.
     """)
 
-    # --- Show raw data ---
-    with st.expander("📋 Xem dữ liệu chi tiết"):
+    # --- Bảng toàn bộ dữ liệu ---
+    with st.expander("📋 Xem toàn bộ dữ liệu chi tiết"):
         st.dataframe(df[[
             "symbol","name","current_price","market_cap","total_volume",
             "%1h","%24h","%7d"
         ]])
+
+    # --- Top Gainers ---
+    st.subheader(f"🚀 Top coin TĂNG mạnh nhất ({rank_period})")
+    top_gainers = df.sort_values(by=rank_period, ascending=False).head(10)
+    st.dataframe(top_gainers[[
+        "symbol","name","current_price","%1h","%24h","%7d","market_cap","total_volume"
+    ]])
+
+    # --- Top Losers ---
+    st.subheader(f"📉 Top coin GIẢM mạnh nhất ({rank_period})")
+    top_losers = df.sort_values(by=rank_period, ascending=True).head(10)
+    st.dataframe(top_losers[[
+        "symbol","name","current_price","%1h","%24h","%7d","market_cap","total_volume"
+    ]])
 
     # --- Auto refresh ---
     if refresh > 0:
         st.toast(f"⏳ Trang sẽ tự refresh mỗi {refresh} giây", icon="🔄")
         st.experimental_set_query_params(ts=datetime.utcnow().timestamp())
         st.experimental_rerun()
-
 
 # ========================= LỊCH SỬ 3 NĂM =========================
 else:
