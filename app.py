@@ -6,7 +6,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="Crypto Market Dashboard", layout="wide")
 
-st.title("📊 Crypto Market Dashboard (CoinGecko API)")
+st.title("📊 Headmap Dashboard By Tins")
 
 # --- Sidebar chọn chế độ ---
 tab = st.sidebar.radio("Chọn chế độ hiển thị", ["Heatmap hiện tại", "Lịch sử 3 năm"])
