@@ -15,6 +15,7 @@ tab = st.sidebar.radio("Chọn chế độ hiển thị", ["Heatmap hiện tại
 if tab == "Heatmap hiện tại":
     top_n = st.sidebar.slider("Chọn số coin (Top N)", 10, 100, 30, 10)
     currency = st.sidebar.selectbox("Chọn đơn vị tiền", ["usd", "eur", "vnd"])
+    sort_option = st.sidebar.radio("Sắp xếp coin theo:", ["MarketCap", "%Change 1h", "%Change 24h", "%Change 7d"])
     refresh = st.sidebar.number_input("Tự động refresh (giây)", 0, 600, 0)
 
     # --- Fetch data ---
@@ -41,15 +42,27 @@ if tab == "Heatmap hiện tại":
     }, inplace=True)
 
     df['market_cap'] = pd.to_numeric(df['market_cap'], errors='coerce').fillna(0)
+    df['%1h'] = pd.to_numeric(df['%1h'], errors='coerce').fillna(0)
     df['%24h'] = pd.to_numeric(df['%24h'], errors='coerce').fillna(0)
+    df['%7d'] = pd.to_numeric(df['%7d'], errors='coerce').fillna(0)
     df = df[df['market_cap'] > 0]
+
+    # --- Sorting logic ---
+    if sort_option == "%Change 1h":
+        df = df.sort_values(by='%1h', ascending=False).reset_index(drop=True)
+    elif sort_option == "%Change 24h":
+        df = df.sort_values(by='%24h', ascending=False).reset_index(drop=True)
+    elif sort_option == "%Change 7d":
+        df = df.sort_values(by='%7d', ascending=False).reset_index(drop=True)
+    else:
+        df = df.sort_values(by='market_cap', ascending=False).reset_index(drop=True)
 
     # --- Heatmap ---
     fig = px.treemap(
         df,
         path=['symbol'],
         values='market_cap',
-        color='%24h',
+        color='%24h',  # luôn dùng %24h để tô màu
         hover_data={
             'current_price': True,
             'market_cap': True,
@@ -59,7 +72,7 @@ if tab == "Heatmap hiện tại":
             '%7d': True
         },
         color_continuous_scale=['red','white','green'],
-        title=f"Crypto Heatmap (Top {top_n}) - MarketCap vs %Change 24h"
+        title=f"Crypto Heatmap (Top {top_n}) - Sắp xếp theo {sort_option}"
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -96,12 +109,10 @@ else:
     def fetch_coin_list():
         url = "https://api.coingecko.com/api/v3/coins/list"
         data = requests.get(url, timeout=20).json()
-        df = pd.DataFrame(data)
-        return df
+        return pd.DataFrame(data)
 
     coin_list = fetch_coin_list()
 
-    # Dropdown chọn coin theo tên
     coin_name = st.sidebar.selectbox("Chọn coin", sorted(coin_list['name'].tolist()))
     coin_id = coin_list.loc[coin_list['name'] == coin_name, 'id'].values[0]
     currency = st.sidebar.selectbox("Chọn đơn vị tiền", ["usd", "eur", "vnd"], key="hist")
@@ -110,12 +121,10 @@ else:
     @st.cache_data(ttl=3600)
     def fetch_history(coin_id, currency):
         url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-        params = {"vs_currency": currency, "days": 1095}  # 3 năm ~ 1095 ngày
+        params = {"vs_currency": currency, "days": 1095}
         data = requests.get(url, params=params, timeout=20).json()
-
         if not data or "prices" not in data:
             return pd.DataFrame(columns=["timestamp","price","date"])
-
         prices = data["prices"]
         df = pd.DataFrame(prices, columns=["timestamp","price"])
         df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
