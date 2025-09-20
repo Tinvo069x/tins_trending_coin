@@ -4,11 +4,11 @@ import plotly.express as px
 import streamlit as st
 from datetime import datetime
 
-st.set_page_config(page_title="Crypto Dashboard", layout="wide")
+st.set_page_config(page_title="Crypto Market Dashboard", layout="wide")
 
 st.title("📊 Crypto Market Dashboard (CoinGecko API)")
 
-# --- Sidebar config ---
+# --- Sidebar chọn chế độ ---
 tab = st.sidebar.radio("Chọn chế độ hiển thị", ["Heatmap hiện tại", "Lịch sử 3 năm"])
 
 # ========================= HEATMAP HIỆN TẠI =========================
@@ -89,28 +89,47 @@ if tab == "Heatmap hiện tại":
 
 # ========================= LỊCH SỬ 3 NĂM =========================
 else:
-    coin = st.sidebar.selectbox("Chọn coin", ["bitcoin","ethereum","solana","cardano","ripple"])
+    st.sidebar.write("Chọn coin và xem lịch sử giá 3 năm gần nhất")
+
+    # --- Fetch coin list ---
+    @st.cache_data(ttl=3600)
+    def fetch_coin_list():
+        url = "https://api.coingecko.com/api/v3/coins/list"
+        data = requests.get(url, timeout=20).json()
+        df = pd.DataFrame(data)
+        return df
+
+    coin_list = fetch_coin_list()
+
+    # Dropdown chọn coin theo tên
+    coin_name = st.sidebar.selectbox("Chọn coin", sorted(coin_list['name'].tolist()))
+    coin_id = coin_list.loc[coin_list['name'] == coin_name, 'id'].values[0]
     currency = st.sidebar.selectbox("Chọn đơn vị tiền", ["usd", "eur", "vnd"], key="hist")
 
     # --- Fetch historical data ---
     @st.cache_data(ttl=3600)
-    def fetch_history(coin, currency):
-        url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart"
+    def fetch_history(coin_id, currency):
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
         params = {"vs_currency": currency, "days": 1095}  # 3 năm ~ 1095 ngày
         data = requests.get(url, params=params, timeout=20).json()
+
+        if not data or "prices" not in data:
+            return pd.DataFrame(columns=["timestamp","price","date"])
+
         prices = data["prices"]
         df = pd.DataFrame(prices, columns=["timestamp","price"])
         df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
 
-    hist_df = fetch_history(coin, currency)
+    hist_df = fetch_history(coin_id, currency)
 
-    # --- Line chart ---
-    fig = px.line(hist_df, x="date", y="price",
-                  title=f"{coin.capitalize()} - Lịch sử giá 3 năm gần nhất ({currency.upper()})",
-                  labels={"price": f"Giá ({currency.upper()})", "date": "Ngày"})
-    st.plotly_chart(fig, use_container_width=True)
+    if hist_df.empty:
+        st.error(f"⛔ Không có dữ liệu lịch sử cho coin '{coin_name}' trong 3 năm qua.")
+    else:
+        fig = px.line(hist_df, x="date", y="price",
+                      title=f"{coin_name} - Lịch sử giá 3 năm gần nhất ({currency.upper()})",
+                      labels={"price": f"Giá ({currency.upper()})", "date": "Ngày"})
+        st.plotly_chart(fig, use_container_width=True)
 
-    # --- Hiển thị bảng ---
-    with st.expander("📋 Xem dữ liệu gốc"):
-        st.dataframe(hist_df.tail(20))  # chỉ show 20 dòng cuối
+        with st.expander("📋 Xem dữ liệu gốc"):
+            st.dataframe(hist_df.tail(20))
